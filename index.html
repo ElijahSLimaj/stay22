@@ -1,0 +1,861 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SplitStay × Stay22 Integration Demo</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        'stay22-blue': '#1e40af',
+                        'stay22-light': '#3b82f6',
+                        'splitstay-green': '#059669',
+                        'splitstay-light': '#10b981'
+                    }
+                }
+            }
+        }
+    </script>
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <style>
+        .custom-hotel-marker, .custom-venue-marker {
+            background: transparent !important;
+            border: none !important;
+        }
+        .custom-hotel-marker div {
+            cursor: pointer;
+            transition: transform 0.2s;
+        }
+        .custom-hotel-marker div:hover {
+            transform: scale(1.1);
+        }
+        .leaflet-popup-content-wrapper {
+            border-radius: 12px;
+        }
+    </style>
+</head>
+<body class="bg-gray-50 font-sans overflow-x-hidden">
+    <!-- Demo Navigation -->
+    <div class="bg-white border-b sticky top-0 z-40">
+        <div class="max-w-6xl mx-auto px-6 py-4">
+            <div class="flex justify-between items-center">
+                <h1 class="text-xl font-bold text-gray-900">SplitStay × Stay22 Integration Demo</h1>
+                <div class="flex items-center space-x-4">
+                    <div class="flex items-center space-x-2 text-sm text-gray-600">
+                        <span id="stepIndicator" class="font-semibold">Step 1 of 5</span>
+                        <div class="w-24 bg-gray-200 rounded-full h-2">
+                            <div id="progressBar" class="bg-stay22-blue h-2 rounded-full transition-all duration-300" style="width: 20%"></div>
+                        </div>
+                    </div>
+                    <button id="resetDemo" class="text-stay22-blue hover:text-stay22-light text-sm font-semibold">
+                        <i class="fas fa-redo mr-1"></i>Reset Demo
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Step 1: Stay22 Map Interface -->
+    <div id="step1" class="step-content">
+        <!-- Event Page Header -->
+        <div class="bg-gradient-to-r from-purple-600 to-blue-600 text-white">
+            <div class="max-w-6xl mx-auto px-6 py-8">
+                <div class="flex items-center justify-between">
+                    <div>
+                        <h1 class="text-3xl font-bold mb-2">SXSW 2024</h1>
+                        <p class="text-blue-100 mb-4">March 8-17, 2024 • Austin, TX</p>
+                        <div class="flex items-center space-x-4 text-sm">
+                            <span class="bg-white/20 px-3 py-1 rounded-full">Music</span>
+                            <span class="bg-white/20 px-3 py-1 rounded-full">Tech</span>
+                            <span class="bg-white/20 px-3 py-1 rounded-full">Film</span>
+                        </div>
+                    </div>
+                    <div class="text-right">
+                        <div class="text-sm text-blue-100 mb-1">Powered by</div>
+                        <div class="text-xl font-bold">Stay22</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Map Section -->
+        <div class="max-w-6xl mx-auto px-6 py-8">
+            <div class="bg-white rounded-2xl shadow-lg overflow-hidden">
+                <div class="p-6 border-b">
+                    <h2 class="text-2xl font-bold text-gray-900 mb-2">Find Your Perfect Stay</h2>
+                    <p class="text-gray-600">Interactive map showing hotels near SXSW venues</p>
+                </div>
+                
+                <div class="relative">
+                    <!-- Real Interactive Map -->
+                    <div id="map" class="h-96 rounded-lg overflow-hidden shadow-inner"></div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Hotel Details Popup (appears when pin is clicked) -->
+    <div id="hotelPopup" class="fixed bottom-4 left-4 right-4 bg-white rounded-2xl shadow-2xl border hidden md:left-auto md:right-8 md:w-96" style="z-index: 10000;">
+        <div class="p-6 relative">
+            <!-- Close button - moved to top-left to avoid overlap -->
+            <button id="closeHotelPopup" class="absolute top-2 right-2 text-gray-400 hover:text-gray-600 w-8 h-8 rounded-full bg-gray-100 hover:bg-gray-200 flex items-center justify-center text-sm transition-colors">
+                <i class="fas fa-times"></i>
+            </button>
+            
+            <div class="flex items-start space-x-4 mb-4 pr-10">
+                <img id="hotelImage" 
+                     src="https://images.unsplash.com/photo-1455587734955-081b22074882?ixlib=rb-4.0.3&auto=format&fit=crop&w=100&q=80" 
+                     alt="Hotel" 
+                     class="w-16 h-16 rounded-lg object-cover">
+                <div class="flex-1">
+                    <h3 id="hotelName" class="font-bold text-gray-900">Austin Convention Center Hotel</h3>
+                    <p id="hotelLocation" class="text-gray-600 text-sm">Downtown Austin</p>
+                    <div class="flex items-center mt-1">
+                        <div id="hotelStars" class="flex text-yellow-400 text-xs">
+                            <i class="fas fa-star"></i><i class="fas fa-star"></i><i class="fas fa-star"></i><i class="fas fa-star"></i><i class="fas fa-star"></i>
+                        </div>
+                        <span id="hotelRating" class="text-xs text-gray-500 ml-2">4.8 (324)</span>
+                    </div>
+                </div>
+                <div class="text-right">
+                    <div id="hotelPrice" class="text-xl font-bold text-gray-900">$210</div>
+                    <div class="text-xs text-gray-600">per night</div>
+                </div>
+            </div>
+            
+            <div class="space-y-3">
+                <button class="w-full bg-stay22-blue hover:bg-stay22-light text-white font-semibold py-3 px-4 rounded-lg transition-colors">
+                    Book Now
+                </button>
+                
+                <!-- SplitStay Option -->
+                <button id="splitStayOption" class="w-full border-2 border-splitstay-green text-splitstay-green hover:bg-splitstay-green hover:text-white font-semibold py-3 px-4 rounded-lg transition-all duration-200 flex items-center justify-center">
+                    <i class="fas fa-users mr-2"></i>
+                    Split the Stay – Share accommodation to save costs
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Step 2: SplitStay Overlay -->
+    <div id="step2" class="step-content hidden">
+        <div class="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+            <div class="bg-white rounded-2xl max-w-lg w-full">
+                <div class="p-6">
+                    <!-- SplitStay Branding -->
+                    <div class="text-center mb-6">
+                        <div class="flex items-center justify-center mb-4">
+                            <div class="bg-splitstay-green text-white w-12 h-12 rounded-full flex items-center justify-center mr-3">
+                                <i class="fas fa-users text-xl"></i>
+                            </div>
+                            <div>
+                                <h2 class="text-2xl font-bold text-gray-900">SplitStay</h2>
+                                <p class="text-sm text-gray-600">Powered by SplitStay</p>
+                            </div>
+                        </div>
+                        <h3 class="text-xl font-semibold text-gray-900 mb-2">Find a vetted SplitStay partner to share this booking</h3>
+                    </div>
+
+                    <!-- Hotel Summary -->
+                    <div class="bg-gray-50 rounded-lg p-4 mb-6">
+                        <div class="flex items-center space-x-3">
+                            <img src="https://images.unsplash.com/photo-1566073771259-6a8506099945?ixlib=rb-4.0.3&auto=format&fit=crop&w=60&q=80" 
+                                 alt="Hotel" class="w-12 h-12 rounded object-cover">
+                            <div>
+                                <h4 class="font-semibold text-gray-900">Grand Plaza Hotel</h4>
+                                <p class="text-sm text-gray-600">March 15-17, 2024 • 2 nights</p>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Benefits -->
+                    <div class="space-y-4 mb-6">
+                        <div class="flex items-center space-x-3">
+                            <div class="bg-green-100 w-8 h-8 rounded-full flex items-center justify-center">
+                                <i class="fas fa-dollar-sign text-green-600 text-sm"></i>
+                            </div>
+                            <div>
+                                <h4 class="font-semibold text-gray-900">Lower Cost</h4>
+                                <p class="text-sm text-gray-600">Save 50% by sharing accommodation costs</p>
+                            </div>
+                        </div>
+                        
+                        <div class="flex items-center space-x-3">
+                            <div class="bg-blue-100 w-8 h-8 rounded-full flex items-center justify-center">
+                                <i class="fas fa-shield-alt text-blue-600 text-sm"></i>
+                            </div>
+                            <div>
+                                <h4 class="font-semibold text-gray-900">Safer than Random Splits</h4>
+                                <p class="text-sm text-gray-600">Verified profiles and trust scores</p>
+                            </div>
+                        </div>
+                        
+                        <div class="flex items-center space-x-3">
+                            <div class="bg-purple-100 w-8 h-8 rounded-full flex items-center justify-center">
+                                <i class="fas fa-users text-purple-600 text-sm"></i>
+                            </div>
+                            <div>
+                                <h4 class="font-semibold text-gray-900">Connect Event Attendees</h4>
+                                <p class="text-sm text-gray-600">Share accommodation with fellow SXSW attendees</p>
+                            </div>
+                        </div>
+                    </div>
+
+                    <button id="continueToMatching" class="w-full bg-splitstay-green hover:bg-splitstay-light text-white font-semibold py-4 px-6 rounded-lg transition-colors">
+                        Continue with SplitStay
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Step 3: Roommate Matching Flow -->
+    <div id="step3" class="step-content hidden">
+        <div class="max-w-4xl mx-auto px-6 py-8">
+            <div class="bg-white rounded-2xl shadow-lg p-8">
+                <div class="text-center mb-8">
+                    <h2 class="text-3xl font-bold text-gray-900 mb-2">Find Your Perfect SplitStay Partner</h2>
+                    <p class="text-gray-600">Quick preferences to match you with compatible travelers</p>
+                </div>
+
+                <!-- Quick Filters -->
+                <div class="space-y-6 mb-8">
+                    <div>
+                        <h3 class="text-lg font-semibold text-gray-900 mb-3">Sleep Schedule (Optional)</h3>
+                        <div class="flex space-x-4">
+                            <button class="filter-btn px-4 py-2 border-2 border-gray-200 rounded-lg hover:border-splitstay-green transition-colors">
+                                <i class="fas fa-sun mr-2"></i>Early Riser
+                            </button>
+                            <button class="filter-btn px-4 py-2 border-2 border-gray-200 rounded-lg hover:border-splitstay-green transition-colors">
+                                <i class="fas fa-moon mr-2"></i>Night Owl
+                            </button>
+                        </div>
+                    </div>
+
+                    <div>
+                        <h3 class="text-lg font-semibold text-gray-900 mb-3">Social Style (Optional)</h3>
+                        <div class="flex space-x-4">
+                            <button class="filter-btn px-4 py-2 border-2 border-gray-200 rounded-lg hover:border-splitstay-green transition-colors">
+                                <i class="fas fa-volume-down mr-2"></i>Quiet
+                            </button>
+                            <button class="filter-btn px-4 py-2 border-2 border-gray-200 rounded-lg hover:border-splitstay-green transition-colors">
+                                <i class="fas fa-comments mr-2"></i>Social
+                            </button>
+                        </div>
+                    </div>
+
+                    <div>
+                        <h3 class="text-lg font-semibold text-gray-900 mb-3">Gender Preference (Optional)</h3>
+                        <div class="flex space-x-4">
+                            <button class="filter-btn px-4 py-2 border-2 border-gray-200 rounded-lg hover:border-splitstay-green transition-colors">
+                                Any
+                            </button>
+                            <button class="filter-btn px-4 py-2 border-2 border-gray-200 rounded-lg hover:border-splitstay-green transition-colors">
+                                Same Gender
+                            </button>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Trust-First Messaging -->
+                <div class="bg-green-50 rounded-lg p-6 mb-8 text-center">
+                    <i class="fas fa-shield-check text-3xl text-green-600 mb-4"></i>
+                    <h3 class="text-lg font-semibold text-gray-900 mb-2">Trust-First Matching</h3>
+                    <p class="text-gray-600">All SplitStay partners are verified SXSW attendees with trust scores based on previous stays and reviews.</p>
+                </div>
+
+                <button id="confirmBookingMatch" class="w-full bg-splitstay-green hover:bg-splitstay-light text-white font-semibold py-4 px-6 rounded-lg transition-colors text-lg">
+                    Confirm Booking & Match
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Step 4: Booking Confirmation -->
+    <div id="step4" class="step-content hidden">
+        <div class="max-w-4xl mx-auto px-6 py-8">
+            <div class="bg-white rounded-2xl shadow-lg overflow-hidden">
+                <!-- Header -->
+                <div class="bg-gradient-to-r from-stay22-blue to-splitstay-green text-white p-6">
+                    <div class="flex items-center justify-between">
+                        <div>
+                            <h2 class="text-2xl font-bold mb-1">Booking Confirmation</h2>
+                            <p class="text-blue-100">Stay22 × SplitStay</p>
+                        </div>
+                        <div class="flex items-center space-x-4">
+                            <div class="bg-white/20 px-3 py-1 rounded text-sm font-semibold">Stay22</div>
+                            <span class="text-white">×</span>
+                            <div class="bg-white/20 px-3 py-1 rounded text-sm font-semibold">SplitStay</div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="p-8">
+                    <!-- Hotel Details -->
+                    <div class="flex items-start space-x-6 mb-8">
+                        <img src="https://images.unsplash.com/photo-1566073771259-6a8506099945?ixlib=rb-4.0.3&auto=format&fit=crop&w=120&q=80" 
+                             alt="Hotel" class="w-24 h-24 rounded-lg object-cover">
+                        <div class="flex-1">
+                            <h3 class="text-xl font-bold text-gray-900 mb-1">Grand Plaza Hotel</h3>
+                            <p class="text-gray-600 mb-2">Downtown Austin, TX</p>
+                            <p class="text-gray-600 mb-4">March 15-17, 2024 • 2 nights</p>
+                            
+                            <!-- Price Savings -->
+                            <div class="bg-green-50 rounded-lg p-4">
+                                <div class="flex items-center justify-between mb-2">
+                                    <span class="text-gray-600">Original Price:</span>
+                                    <span class="text-gray-400 line-through">$420 total</span>
+                                </div>
+                                <div class="flex items-center justify-between text-lg font-bold">
+                                    <span class="text-green-600">Your Split Price:</span>
+                                    <span class="text-green-600">$210 total (50% savings!)</span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Trust Badge -->
+                    <div class="bg-blue-50 rounded-lg p-6 mb-8 text-center">
+                        <div class="flex items-center justify-center mb-4">
+                            <i class="fas fa-certificate text-3xl text-blue-600 mr-3"></i>
+                            <div>
+                                <h3 class="text-lg font-bold text-gray-900">SplitStay Guarantee</h3>
+                                <p class="text-blue-600 font-semibold">Transparency & Safety</p>
+                            </div>
+                        </div>
+                        <p class="text-gray-600">Your booking is protected by SplitStay's verification system and dispute resolution process.</p>
+                    </div>
+
+                    <!-- Payment Button -->
+                    <button id="completeBooking" class="w-full bg-stay22-blue hover:bg-stay22-light text-white font-semibold py-4 px-6 rounded-lg transition-colors text-lg">
+                        <i class="fas fa-credit-card mr-2"></i>
+                        Complete Booking - $210
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Step 5: Post-Booking Trust Touch -->
+    <div id="step5" class="step-content hidden">
+        <div class="max-w-4xl mx-auto px-6 py-8">
+            <div class="bg-white rounded-2xl shadow-lg p-8 text-center">
+                <!-- Success Message -->
+                <div class="mb-8">
+                    <div class="w-20 h-20 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-6">
+                        <i class="fas fa-check text-3xl text-green-600"></i>
+                    </div>
+                    <h2 class="text-3xl font-bold text-gray-900 mb-2">Booking Confirmed!</h2>
+                    <p class="text-gray-600 text-lg">You've successfully booked with SplitStay</p>
+                </div>
+
+                <!-- Roommate Profile -->
+                <div class="bg-gray-50 rounded-2xl p-6 mb-8 max-w-md mx-auto">
+                    <h3 class="text-xl font-semibold text-gray-900 mb-4">Meet Your SplitStay Partner</h3>
+                    
+                    <div class="flex items-center space-x-4 mb-4">
+                        <div class="w-16 h-16 bg-gradient-to-r from-blue-400 to-purple-400 rounded-full flex items-center justify-center text-white text-xl font-bold">
+                            A
+                        </div>
+                        <div class="text-left">
+                            <h4 class="font-bold text-gray-900">Aisha Rahman</h4>
+                            <p class="text-gray-600 text-sm">Software Developer</p>
+                            <p class="text-gray-600 text-sm">First time at SXSW</p>
+                            <div class="flex items-center mt-1">
+                                <div class="flex text-yellow-400 text-xs">
+                                    <i class="fas fa-star"></i><i class="fas fa-star"></i><i class="fas fa-star"></i><i class="fas fa-star"></i><i class="fas fa-star"></i>
+                                </div>
+                                <span class="text-xs text-gray-500 ml-2">Trust Score: 4.9</span>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="text-sm text-gray-600 space-y-2">
+                        <p><i class="fas fa-sun text-yellow-500 mr-2"></i>Early riser</p>
+                        <p><i class="fas fa-volume-down text-blue-500 mr-2"></i>Prefers quiet environments</p>
+                        <p><i class="fas fa-music text-purple-500 mr-2"></i>Interested in indie music</p>
+                    </div>
+                </div>
+
+                <!-- Trust Reminder -->
+                <div class="bg-green-50 rounded-lg p-6 mb-8">
+                    <h3 class="font-semibold text-gray-900 mb-2">
+                        <i class="fas fa-shield-check text-green-600 mr-2"></i>
+                        Verified Travelers
+                    </h3>
+                    <p class="text-gray-600">All SplitStay partners are verified through our trust system, including ID verification and previous stay reviews.</p>
+                </div>
+
+                <!-- Next Steps -->
+                <div class="space-y-4">
+                    <button class="w-full bg-splitstay-green hover:bg-splitstay-light text-white font-semibold py-3 px-6 rounded-lg transition-colors">
+                        <i class="fas fa-comments mr-2"></i>
+                        Message Aisha
+                    </button>
+                    
+                    <button class="w-full border-2 border-gray-200 hover:border-gray-300 text-gray-700 font-semibold py-3 px-6 rounded-lg transition-colors">
+                        <i class="fas fa-calendar-alt mr-2"></i>
+                        View Booking Details
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Value Proposition Summary -->
+    <div id="valueProp" class="bg-gradient-to-r from-gray-900 to-gray-800 text-white py-16">
+        <div class="max-w-6xl mx-auto px-6">
+            <h2 class="text-3xl font-bold text-center mb-12">Why This Integration Works</h2>
+            
+            <div class="grid md:grid-cols-3 gap-8">
+                <!-- Incremental Bookings -->
+                <div class="bg-white/10 backdrop-blur rounded-2xl p-6 text-center">
+                    <div class="bg-green-500 w-12 h-12 rounded-full flex items-center justify-center mx-auto mb-4">
+                        <i class="fas fa-chart-line text-xl text-white"></i>
+                    </div>
+                    <h3 class="text-lg font-bold mb-3">Incremental Bookings</h3>
+                    <p class="text-gray-300 text-sm leading-relaxed">
+                        Convert budget-conscious travelers who would abandon. New market segments without cannibalizing existing bookings.
+                    </p>
+                </div>
+
+                <!-- Partner Value -->
+                <div class="bg-white/10 backdrop-blur rounded-2xl p-6 text-center">
+                    <div class="bg-blue-500 w-12 h-12 rounded-full flex items-center justify-center mx-auto mb-4">
+                        <i class="fas fa-handshake text-xl text-white"></i>
+                    </div>
+                    <h3 class="text-lg font-bold mb-3">Partner Differentiation</h3>
+                    <p class="text-gray-300 text-sm leading-relaxed">
+                        Unique feature for event organizers. Shared stays become a compelling attendee acquisition tool.
+                    </p>
+                </div>
+
+                <!-- User Trust & UX -->
+                <div class="bg-white/10 backdrop-blur rounded-2xl p-6 text-center">
+                    <div class="bg-purple-500 w-12 h-12 rounded-full flex items-center justify-center mx-auto mb-4">
+                        <i class="fas fa-shield-alt text-xl text-white"></i>
+                    </div>
+                    <h3 class="text-lg font-bold mb-3">Zero Friction</h3>
+                    <p class="text-gray-300 text-sm leading-relaxed">
+                        Optional overlay that enhances rather than complicates the core booking experience.
+                    </p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+        <!-- Pilot Plan -->
+        <section class="bg-gradient-to-r from-stay22-blue to-splitstay-green rounded-2xl p-8 text-white text-center">
+            <h2 class="text-2xl font-bold mb-6">Pilot Plan</h2>
+            
+            <div class="grid md:grid-cols-3 gap-8 max-w-4xl mx-auto">
+                <div>
+                    <div class="text-3xl font-bold mb-2">2-3 Weeks</div>
+                    <div class="text-blue-100">Test Duration</div>
+                </div>
+                
+                <div>
+                    <div class="text-3xl font-bold mb-2">3 Metrics</div>
+                    <div class="text-blue-100">Booking Uplift, CTR, UX Impact</div>
+                </div>
+                
+                <div>
+                    <div class="text-3xl font-bold mb-2">Low Risk</div>
+                    <div class="text-blue-100">Optional Feature, Easy Rollback</div>
+                </div>
+            </div>
+
+            <div class="mt-8 p-6 bg-white/10 rounded-xl backdrop-blur-sm">
+                <h3 class="font-semibold mb-3">Success Criteria</h3>
+                <div class="grid md:grid-cols-3 gap-4 text-sm">
+                    <div>📈 Measurable booking increase</div>
+                    <div>👆 Strong CTR on "Share this Stay"</div>
+                    <div>😊 No negative UX feedback</div>
+                </div>
+            </div>
+        </section>
+    </main>
+
+    <!-- Share Stay Modal -->
+    <div id="shareModal" class="fixed inset-0 bg-black/50 backdrop-blur-sm hidden z-50 flex items-center justify-center p-4">
+        <div class="bg-white rounded-2xl max-w-2xl w-full max-h-[90vh] overflow-y-auto">
+            <div class="p-6 border-b">
+                <div class="flex justify-between items-center">
+                    <h2 class="text-2xl font-bold text-gray-900">Share this Stay</h2>
+                    <button id="closeModal" class="text-gray-400 hover:text-gray-600 text-2xl">
+                        <i class="fas fa-times"></i>
+                    </button>
+                </div>
+            </div>
+            
+            <div class="p-6">
+                <!-- Hotel Info Summary -->
+                <div class="bg-gray-50 rounded-xl p-4 mb-6">
+                    <div class="flex items-center space-x-4">
+                        <img src="https://images.unsplash.com/photo-1566073771259-6a8506099945?ixlib=rb-4.0.3&ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA%3D%3D&auto=format&fit=crop&w=100&q=80" 
+                             alt="Grand Plaza Hotel" 
+                             class="w-16 h-16 rounded-lg object-cover">
+                        <div>
+                            <h3 class="font-semibold text-gray-900">Grand Plaza Hotel</h3>
+                            <p class="text-gray-600 text-sm">Downtown Austin, TX</p>
+                            <p class="text-gray-600 text-sm">March 15-17, 2024 • 2 nights</p>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Split Pricing -->
+                <div class="bg-gradient-to-r from-green-50 to-blue-50 rounded-xl p-6 mb-6">
+                    <h3 class="text-lg font-semibold text-gray-900 mb-4">Split the Cost</h3>
+                    
+                    <div class="grid grid-cols-2 gap-4 mb-4">
+                        <div class="text-center">
+                            <div class="text-2xl font-bold text-gray-400 line-through">$210</div>
+                            <div class="text-sm text-gray-600">Solo price/night</div>
+                        </div>
+                        <div class="text-center">
+                            <div class="text-3xl font-bold text-splitstay-green">$105</div>
+                            <div class="text-sm text-splitstay-green font-semibold">Split price/night (2 people)</div>
+                        </div>
+                    </div>
+                    
+                    <div class="text-center p-4 bg-white rounded-lg">
+                        <div class="text-lg font-semibold text-gray-900">
+                            Total per person: <span class="text-splitstay-green">$210</span> 
+                            <span class="text-gray-400 text-sm">(was $420)</span>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Post Trip Section -->
+                <div class="mb-6">
+                    <button id="postTripBtn" class="w-full bg-splitstay-green hover:bg-splitstay-light text-white font-semibold py-4 px-6 rounded-xl transition-colors duration-200">
+                        Post Trip & Find Travel Buddies
+                    </button>
+                </div>
+
+                <!-- Join Requests (Initially Hidden) -->
+                <div id="joinRequests" class="hidden">
+                    <h3 class="text-lg font-semibold text-gray-900 mb-4">
+                        <i class="fas fa-users text-splitstay-green mr-2"></i>
+                        Join Requests (3)
+                    </h3>
+                    
+                    <div class="space-y-4">
+                        <!-- Request 1 -->
+                        <div class="border rounded-xl p-4 hover:bg-gray-50 transition-colors">
+                            <div class="flex items-center justify-between">
+                                <div class="flex items-center space-x-3">
+                                    <div class="w-12 h-12 bg-gradient-to-r from-pink-400 to-purple-400 rounded-full flex items-center justify-center text-white font-semibold">
+                                        A
+                                    </div>
+                                    <div>
+                                        <div class="font-semibold text-gray-900">Aisha Rahman</div>
+                                        <div class="text-sm text-gray-600">Attending SXSW 2024</div>
+                                        <div class="flex items-center mt-1">
+                                            <div class="flex text-yellow-400 text-xs">
+                                                <i class="fas fa-star"></i><i class="fas fa-star"></i><i class="fas fa-star"></i><i class="fas fa-star"></i><i class="fas fa-star"></i>
+                                            </div>
+                                            <span class="text-xs text-gray-500 ml-2">Trust Score: 4.9</span>
+                                        </div>
+                                    </div>
+                                </div>
+                                <button class="bg-splitstay-green text-white px-4 py-2 rounded-lg text-sm font-semibold hover:bg-splitstay-light transition-colors">
+                                    Accept
+                                </button>
+                            </div>
+                        </div>
+
+                        <!-- Request 2 -->
+                        <div class="border rounded-xl p-4 hover:bg-gray-50 transition-colors">
+                            <div class="flex items-center justify-between">
+                                <div class="flex items-center space-x-3">
+                                    <div class="w-12 h-12 bg-gradient-to-r from-blue-400 to-cyan-400 rounded-full flex items-center justify-center text-white font-semibold">
+                                        M
+                                    </div>
+                                    <div>
+                                        <div class="font-semibold text-gray-900">Marcus Chen</div>
+                                        <div class="text-sm text-gray-600">Tech conference attendee</div>
+                                        <div class="flex items-center mt-1">
+                                            <div class="flex text-yellow-400 text-xs">
+                                                <i class="fas fa-star"></i><i class="fas fa-star"></i><i class="fas fa-star"></i><i class="fas fa-star"></i><i class="fas fa-star"></i>
+                                            </div>
+                                            <span class="text-xs text-gray-500 ml-2">Trust Score: 4.8</span>
+                                        </div>
+                                    </div>
+                                </div>
+                                <button class="bg-splitstay-green text-white px-4 py-2 rounded-lg text-sm font-semibold hover:bg-splitstay-light transition-colors">
+                                    Accept
+                                </button>
+                            </div>
+                        </div>
+
+                        <!-- Request 3 -->
+                        <div class="border rounded-xl p-4 hover:bg-gray-50 transition-colors">
+                            <div class="flex items-center justify-between">
+                                <div class="flex items-center space-x-3">
+                                    <div class="w-12 h-12 bg-gradient-to-r from-green-400 to-teal-400 rounded-full flex items-center justify-center text-white font-semibold">
+                                        S
+                                    </div>
+                                    <div>
+                                        <div class="font-semibold text-gray-900">Sarah Kim</div>
+                                        <div class="text-sm text-gray-600">First-time Austin visitor</div>
+                                        <div class="flex items-center mt-1">
+                                            <div class="flex text-yellow-400 text-xs">
+                                                <i class="fas fa-star"></i><i class="fas fa-star"></i><i class="fas fa-star"></i><i class="fas fa-star"></i><i class="far fa-star"></i>
+                                            </div>
+                                            <span class="text-xs text-gray-500 ml-2">Trust Score: 4.6</span>
+                                        </div>
+                                    </div>
+                                </div>
+                                <button class="bg-splitstay-green text-white px-4 py-2 rounded-lg text-sm font-semibold hover:bg-splitstay-light transition-colors">
+                                    Accept
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="mt-6 p-4 bg-green-50 rounded-lg text-center">
+                        <p class="text-green-800 font-semibold">
+                            <i class="fas fa-check-circle mr-2"></i>
+                            Great! You have multiple interested travelers. Choose your travel buddy and split the cost!
+                        </p>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let currentStep = 1;
+        const totalSteps = 5;
+
+        // DOM Elements
+        const stepIndicator = document.getElementById('stepIndicator');
+        const progressBar = document.getElementById('progressBar');
+        const resetBtn = document.getElementById('resetDemo');
+
+        // Step navigation functions
+        function showStep(stepNumber) {
+            // Hide all steps
+            for (let i = 1; i <= totalSteps; i++) {
+                const step = document.getElementById(`step${i}`);
+                if (step) step.classList.add('hidden');
+            }
+            
+            // Show current step
+            const currentStepEl = document.getElementById(`step${stepNumber}`);
+            if (currentStepEl) currentStepEl.classList.remove('hidden');
+            
+            // Update progress
+            currentStep = stepNumber;
+            updateProgress();
+        }
+
+        function updateProgress() {
+            stepIndicator.textContent = `Step ${currentStep} of ${totalSteps}`;
+            const progressPercent = (currentStep / totalSteps) * 100;
+            progressBar.style.width = `${progressPercent}%`;
+        }
+
+        function nextStep() {
+            if (currentStep < totalSteps) {
+                showStep(currentStep + 1);
+            }
+        }
+
+        // Reset demo
+        resetBtn.addEventListener('click', () => {
+            showStep(1);
+            // Reset any modified button states
+            const postTripBtn = document.getElementById('postTripBtn');
+            if (postTripBtn) {
+                postTripBtn.textContent = 'Post Trip & Find Travel Buddies';
+                postTripBtn.classList.remove('bg-green-600');
+                postTripBtn.disabled = false;
+            }
+        });
+
+        // Real map and hotel data
+        let map;
+        let hotelMarkers = [];
+        
+        const hotelData = {
+            'grand-plaza': {
+                name: 'Austin Convention Center Hotel',
+                location: 'Downtown Austin',
+                price: '$210',
+                rating: '4.8 (324)',
+                stars: 5,
+                image: 'https://images.unsplash.com/photo-1455587734955-081b22074882?ixlib=rb-4.0.3&auto=format&fit=crop&w=100&q=80',
+                coords: [30.2672, -97.7431] // Downtown Austin
+            },
+            'austin-suites': {
+                name: 'Four Points by Sheraton',
+                location: 'East Austin',
+                price: '$180',
+                rating: '4.6 (198)',
+                stars: 4,
+                image: 'https://images.unsplash.com/photo-1520637836862-4d197d17c88a?ixlib=rb-4.0.3&auto=format&fit=crop&w=100&q=80',
+                coords: [30.2640, -97.7280] // East Austin
+            },
+            'downtown-inn': {
+                name: 'Hampton Inn & Suites',
+                location: 'South Austin',
+                price: '$150',
+                rating: '4.3 (156)',
+                stars: 4,
+                image: 'https://images.unsplash.com/photo-1542314831-068cd1dbfeeb?ixlib=rb-4.0.3&auto=format&fit=crop&w=100&q=80',
+                coords: [30.2500, -97.7500] // South Austin
+            }
+        };
+
+        // SXSW Venues
+        const venues = [
+            { name: 'Austin Convention Center', coords: [30.2634, -97.7394], icon: 'music' },
+            { name: '6th Street Entertainment', coords: [30.2666, -97.7389], icon: 'microphone' },
+            { name: 'Paramount Theatre', coords: [30.2697, -97.7421], icon: 'film' }
+        ];
+
+        function initializeMap() {
+            // Initialize the map centered on Austin
+            map = L.map('map').setView([30.2672, -97.7431], 14);
+
+            // Add tile layer (OpenStreetMap)
+            L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+                attribution: '© OpenStreetMap contributors'
+            }).addTo(map);
+
+            // Custom hotel icon
+            const hotelIcon = L.divIcon({
+                className: 'custom-hotel-marker',
+                html: '<div class="bg-stay22-blue text-white w-10 h-10 rounded-full flex items-center justify-center text-sm font-bold shadow-lg border-2 border-white"><i class="fas fa-bed"></i></div>',
+                iconSize: [40, 40],
+                iconAnchor: [20, 20]
+            });
+
+            // Add hotel markers
+            Object.entries(hotelData).forEach(([key, hotel]) => {
+                const marker = L.marker(hotel.coords, { icon: hotelIcon })
+                    .addTo(map)
+                    .on('click', () => {
+                        updateHotelPopup(key);
+                        document.getElementById('hotelPopup').classList.remove('hidden');
+                    });
+                
+                hotelMarkers.push(marker);
+            });
+
+            // Add venue markers
+            venues.forEach(venue => {
+                const venueIcon = L.divIcon({
+                    className: 'custom-venue-marker',
+                    html: `<div class="bg-purple-600 text-white px-2 py-1 rounded text-xs font-semibold shadow-lg"><i class="fas fa-${venue.icon} mr-1"></i>${venue.name}</div>`,
+                    iconSize: [120, 30],
+                    iconAnchor: [60, 15]
+                });
+
+                L.marker(venue.coords, { icon: venueIcon }).addTo(map);
+            });
+        }
+
+        function updateHotelPopup(hotelKey) {
+            const hotel = hotelData[hotelKey];
+            if (!hotel) return;
+
+            document.getElementById('hotelName').textContent = hotel.name;
+            document.getElementById('hotelLocation').textContent = hotel.location;
+            document.getElementById('hotelPrice').textContent = hotel.price;
+            document.getElementById('hotelRating').textContent = hotel.rating;
+            
+            // Update image with error handling
+            const hotelImageEl = document.getElementById('hotelImage');
+            hotelImageEl.src = hotel.image;
+            hotelImageEl.onerror = function() {
+                // Fallback to a generic hotel icon if image fails to load
+                this.style.backgroundColor = '#f3f4f6';
+                this.style.display = 'flex';
+                this.style.alignItems = 'center';
+                this.style.justifyContent = 'center';
+                this.innerHTML = '<i class="fas fa-hotel text-gray-400 text-2xl"></i>';
+            };
+            
+            // Update stars
+            const starsContainer = document.getElementById('hotelStars');
+            starsContainer.innerHTML = '';
+            for (let i = 0; i < 5; i++) {
+                const star = document.createElement('i');
+                star.className = i < hotel.stars ? 'fas fa-star' : 'far fa-star';
+                starsContainer.appendChild(star);
+            }
+        }
+
+        // Initialize everything
+        document.addEventListener('DOMContentLoaded', () => {
+            // Initialize the real map
+            setTimeout(initializeMap, 100); // Small delay to ensure DOM is ready
+
+            // Close hotel popup
+            const closeHotelPopup = document.getElementById('closeHotelPopup');
+            const hotelPopup = document.getElementById('hotelPopup');
+            
+            if (closeHotelPopup) {
+                closeHotelPopup.addEventListener('click', () => {
+                    hotelPopup.classList.add('hidden');
+                });
+            }
+
+            // Step 1 → Step 2: SplitStay option click
+            const splitStayOption = document.getElementById('splitStayOption');
+            if (splitStayOption) {
+                splitStayOption.addEventListener('click', () => {
+                    hotelPopup.classList.add('hidden');
+                    nextStep(); // Go to step 2
+                });
+            }
+
+            // Step 2 → Step 3: Continue to matching
+            const continueToMatching = document.getElementById('continueToMatching');
+            if (continueToMatching) {
+                continueToMatching.addEventListener('click', () => {
+                    nextStep(); // Go to step 3
+                });
+            }
+
+            // Step 3: Filter button interactions
+            const filterBtns = document.querySelectorAll('.filter-btn');
+            filterBtns.forEach(btn => {
+                btn.addEventListener('click', () => {
+                    // Toggle selection
+                    btn.classList.toggle('border-splitstay-green');
+                    btn.classList.toggle('bg-splitstay-green');
+                    btn.classList.toggle('text-white');
+                });
+            });
+
+            // Step 3 → Step 4: Confirm booking & match
+            const confirmBookingMatch = document.getElementById('confirmBookingMatch');
+            if (confirmBookingMatch) {
+                confirmBookingMatch.addEventListener('click', () => {
+                    nextStep(); // Go to step 4
+                });
+            }
+
+            // Step 4 → Step 5: Complete booking
+            const completeBooking = document.getElementById('completeBooking');
+            if (completeBooking) {
+                completeBooking.addEventListener('click', () => {
+                    nextStep(); // Go to step 5
+                });
+            }
+
+            // Initialize - show step 1
+            showStep(1);
+        });
+    </script>
+</body>
+</html>
